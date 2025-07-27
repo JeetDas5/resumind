@@ -78,6 +78,42 @@ Make sure to deploy the output of `npm run build`
 │   └── server/    # Server-side code
 ```
 
+## CI/CD Pipeline
+
+This project uses GitHub Actions for continuous integration and deployment:
+
+### Continuous Integration
+
+On every push and pull request to the `main` branch, the workflow:
+
+1. Sets up Node.js environment
+2. Installs dependencies
+3. Runs type checking
+4. Builds the application
+
+### Continuous Deployment
+
+When code is pushed to the `main` branch (not on pull requests), the workflow:
+
+1. Builds a Docker image using the project's Dockerfile
+2. Pushes the image to GitHub Container Registry (GHCR) with two tags:
+   - `latest` tag for the most recent version
+   - A specific tag using the commit SHA for versioning
+
+### Using the Docker Image
+
+Once the workflow completes, you can pull and run the Docker image:
+
+```bash
+# Pull the image
+docker pull ghcr.io/YOUR_GITHUB_USERNAME/ai-resume-analyser:latest
+
+# Run the container
+docker run -p 3000:3000 ghcr.io/YOUR_GITHUB_USERNAME/ai-resume-analyser:latest
+```
+
+Note: Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username.
+
 ## Styling
 
 This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
