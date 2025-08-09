@@ -7,6 +7,9 @@ import {convertPdfToImage} from "~/lib/PdfToImage";
 import {generateUUID} from "~/lib/utils";
 import {prepareInstructions} from "../../constants";
 
+
+export const meta = () => ([{title: "Resumind | Upload"}, {name: "description", content: "Upload your resume"},])
+
 const upload = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [statusText, setStatusText] = useState("");
@@ -66,10 +69,7 @@ const upload = () => {
         await kv.set(`resume:${uuid}`, JSON.stringify(data));
         setStatusText("Analysing your resume...");
 
-        const feedback = await ai.feedback(
-            uploadedFile.path,
-            prepareInstructions({jobDescription, jobTitle})
-        );
+        const feedback = await ai.feedback(uploadedFile.path, prepareInstructions({jobDescription, jobTitle}));
 
         if (!feedback) {
             setIsProcessing(false);
@@ -79,7 +79,7 @@ const upload = () => {
         try {
             // Handle different possible response structures from Claude 3.7 Sonnet
             let feedbackText = '';
-            
+
             if (typeof feedback.message.content === 'string') {
                 feedbackText = feedback.message.content;
             } else if (Array.isArray(feedback.message.content)) {
@@ -90,17 +90,17 @@ const upload = () => {
                         break;
                     }
                 }
-                
+
                 // If we didn't find text content with type 'text', try the first element
                 if (!feedbackText && feedback.message.content.length > 0) {
                     feedbackText = feedback.message.content[0].text || '';
                 }
             }
-            
+
             if (!feedbackText) {
                 throw new Error('Could not extract text from AI response');
             }
-            
+
             // Clean the response to ensure it's valid JSON
             feedbackText = feedbackText.trim();
             // Remove any markdown code block markers if present
@@ -113,7 +113,7 @@ const upload = () => {
             if (feedbackText.endsWith('```')) {
                 feedbackText = feedbackText.substring(0, feedbackText.length - 3);
             }
-            
+
             // Parse the JSON
             data.feedback = JSON.parse(feedbackText);
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
