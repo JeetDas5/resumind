@@ -119,7 +119,7 @@ const upload = () => {
             await kv.set(`resume:${uuid}`, JSON.stringify(data));
             setIsProcessing(false);
             setStatusText("Resume analysed successfully. You can now review your feedback.");
-            // navigate(`/resume/${uuid}`);
+            navigate(`/resume/${uuid}`);
             console.log("feedback: ", data);
         } catch (error) {
             console.error("Error processing AI feedback:", error);
