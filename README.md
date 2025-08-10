@@ -1,123 +1,171 @@
-# Welcome to React Router!
+# Resumind – AI Resume Analyzer
 
-A modern, production-ready template for building full-stack React applications using React Router.
+Smart, AI-powered resume feedback with ATS scoring, improvement tips, and application tracking.
 
-[![Open in StackBlitz](https://developer.stackblitz.com/img/open_in_stackblitz.svg)](https://stackblitz.com/github/remix-run/react-router-templates/tree/main/default)
+Resumind lets you upload a resume (PDF), analyzes it with an AI model, and provides structured feedback across ATS fit, tone & style, content, structure, and skills. It stores your past analyses so you can revisit and track improvements over time.
 
-## Features
+## Overview
 
-- 🚀 Server-side rendering
-- ⚡️ Hot Module Replacement (HMR)
-- 📦 Asset bundling and optimization
-- 🔄 Data loading and mutations
-- 🔒 TypeScript by default
-- 🎉 TailwindCSS for styling
-- 📖 [React Router docs](https://reactrouter.com/)
+- Upload a PDF resume and optional job details (company, role, description)
+- The PDF is converted to a high‑quality preview image client‑side
+- The file and preview are stored via Puter’s client APIs
+- AI analysis runs using Puter AI (Claude 3.7 Sonnet) and returns a structured JSON feedback object
+- You can review the full analysis and overall score, and open your PDF in a new tab
+
+## Tech Stack
+
+- React 19, React Router v7 (SPA mode)
+- Vite 6, TypeScript
+- Tailwind CSS v4
+- Zustand for client state
+- pdfjs-dist for PDF preview rendering
+- Puter.js v2 for client auth, file storage (fs), key‑value (kv), and AI chat
+
+Note: SSR is disabled for this project (see `react-router.config.ts: ssr: false`).
+
+## Prerequisites
+
+- Node.js 18+ (recommended) and npm
+- Browser access to load Puter’s client script at runtime: `https://js.puter.com/v2/`
+- Internet connectivity for the AI and Puter APIs
+
+No server‑side environment variables are required. All integrations are client‑side via Puter.
+
+## Live Demo
+
+- Deployed app: https://puter.com/app/jeet-ai-resume-analyzer
 
 ## Getting Started
 
-### Installation
+1. Install dependencies
 
-Install the dependencies:
+   npm install
 
-```bash
-npm install
-```
+2. Start the dev server (with HMR)
 
-### Development
+   npm run dev
 
-Start the development server with HMR:
+   - App runs at http://localhost:5173
+   - On first use, you’ll be redirected to sign in with Puter (client auth)
 
-```bash
-npm run dev
-```
+3. Build for production
 
-Your application will be available at `http://localhost:5173`.
+   npm run build
 
-## Building for Production
+4. Run the built app locally
 
-Create a production build:
+   npm start
 
-```bash
-npm run build
-```
+   This serves the output from `./build/server/index.js` using `@react-router/serve`.
 
-## Deployment
+## Core Scripts
 
-### Docker Deployment
+- dev: Start the Vite/React Router dev server
+- build: Build client and server bundles
+- start: Serve the built app
+- typecheck: Generate React Router types and run TypeScript
 
-To build and run using Docker:
+From package.json:
 
-```bash
-docker build -t my-app .
+- "dev": react-router dev
+- "build": react-router build
+- "start": react-router-serve ./build/server/index.js
+- "typecheck": react-router typegen && tsc
 
-# Run the container
-docker run -p 3000:3000 my-app
-```
+## Key Features & Flows
 
-The containerized application can be deployed to any platform that supports Docker, including:
+- Authentication: Client‑side via Puter auth (see app/root.tsx loads Puter script, and app/lib/puter.ts store)
+- File Storage: Upload and manage resume PDF and generated PNG preview via Puter.fs
+- KV Storage: Persist analysis entries under keys like `resume:<uuid>`
+- AI Analysis: Uses Puter.ai.chat with model `claude-3-7-sonnet` and a strict JSON output schema (see constants/index.ts)
+- PDF to Image: Client‑side rendering via pdfjs-dist; worker shipped in `public/pdf.worker.min.mjs`
 
-- AWS ECS
-- Google Cloud Run
-- Azure Container Apps
-- Digital Ocean App Platform
-- Fly.io
-- Railway
+Routes
+- /auth – Sign in/out with Puter
+- / – Home; lists past analyses and allows navigation to upload
+- /upload – Upload PDF, provide job details, run analysis
+- /resume/:id – View analysis, score, ATS tips, and preview
+- /wipe – Utility to delete all files and KV entries (for development/testing)
 
-### DIY Deployment
+## Configuration Notes
 
-If you're familiar with deploying Node applications, the built-in app server is production-ready.
+- Puter script is included in app/root.tsx: `<script src="https://js.puter.com/v2/"></script>`
+- React Router SPA mode: `react-router.config.ts` sets `ssr: false`
+- Tailwind is preconfigured (v4) and styles are in `app/app.css`
+- The PDF worker file must be available at `/pdf.worker.min.mjs` (present in `public/`)
 
-Make sure to deploy the output of `npm run build`
+## Docker
 
-```
-├── package.json
-├── package-lock.json (or pnpm-lock.yaml, or bun.lockb)
-├── build/
-│   ├── client/    # Static assets
-│   └── server/    # Server-side code
-```
+A Dockerfile and DOCKER_USAGE.md are provided. Typical flow:
 
-## CI/CD Pipeline
+- Build image: docker build -t ai-resume-analyser .
+- Run: docker run -p 3000:3000 ai-resume-analyser
 
-This project uses GitHub Actions for continuous integration and deployment:
+See DOCKER_USAGE.md for detailed steps and deployment tips.
 
-### Continuous Integration
+## Project Structure
 
-On every push and pull request to the `main` branch, the workflow:
+ai-resume-analyser/
+- app/
+  - app.css
+  - root.tsx
+  - routes.ts
+  - components/
+    - Navbar.tsx
+    - FileUploader.tsx
+    - ResumeCard.tsx
+    - Summary.tsx
+    - ATS.tsx
+    - Details.tsx
+    - ScoreCircle.tsx
+    - ScoreGauge.tsx
+    - ScoreBadge.tsx
+    - Accordian.tsx
+  - lib/
+    - puter.ts
+    - PdfToImage.ts
+  - routes/
+    - auth.tsx
+    - home.tsx
+    - upload.tsx
+    - resume.tsx
+    - wipe.tsx
+- constants/
+  - index.ts
+- public/
+  - pdf.worker.min.mjs
+  - images/ (backgrounds, preview gifs, sample resume images)
+  - icons/ (e.g., back.svg)
+- types/
+  - index.d.ts
+  - puter.d.ts
+- react-router.config.ts
+- vite.config.ts
+- tsconfig.json
+- package.json
+- package-lock.json
+- Dockerfile
+- DOCKER_USAGE.md
+- README.md
+- commit_message.txt
 
-1. Sets up Node.js environment
-2. Installs dependencies
-3. Runs type checking
-4. Builds the application
+## Usage Tips
 
-### Continuous Deployment
+- Only PDF files are supported for upload; the app renders page 1 as a PNG preview
+- AI output is forced to JSON; the app cleans code fences if present before parsing
+- If parsing fails, you’ll see a user‑friendly error and can retry
+- The Wipe page removes uploaded files and stored KV entries—use with caution
 
-When code is pushed to the `main` branch (not on pull requests), the workflow:
+## Acknowledgements
 
-1. Builds a Docker image using the project's Dockerfile
-2. Pushes the image to GitHub Container Registry (GHCR) with two tags:
-   - `latest` tag for the most recent version
-   - A specific tag using the commit SHA for versioning
+- Puter — https://puter.com
+- Tailwind CSS — https://tailwindcss.com
+- React Router — https://reactrouter.com
+- Vite — https://vitejs.dev
+- TypeScript — https://www.typescriptlang.org
+- Zustand — https://zustand.docs.pmnd.rs/
+- React — https://react.dev
 
-### Using the Docker Image
+**Made with ❤️ by Jeet Das**
 
-Once the workflow completes, you can pull and run the Docker image:
-
-```bash
-# Pull the image
-docker pull ghcr.io/YOUR_GITHUB_USERNAME/ai-resume-analyser:latest
-
-# Run the container
-docker run -p 3000:3000 ghcr.io/YOUR_GITHUB_USERNAME/ai-resume-analyser:latest
-```
-
-Note: Replace `YOUR_GITHUB_USERNAME` with your actual GitHub username.
-
-## Styling
-
-This template comes with [Tailwind CSS](https://tailwindcss.com/) already configured for a simple default starting experience. You can use whatever CSS framework you prefer.
-
----
-
-Built with ❤️ using React Router.
+GitHub: https://github.com/JeetDas5
