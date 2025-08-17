@@ -7,3 +7,6 @@
 
 # Commit message
 commit_message.txt
+
+# Build
+/.vscode/
