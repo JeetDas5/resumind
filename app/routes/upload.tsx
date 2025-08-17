@@ -49,7 +49,7 @@ const upload = () => {
         setStatusText("Fetching job details from Internshala...");
         setIsProcessing(true);
         try {
-            const response = await fetch("http://localhost:5000/api/scrape", {
+            const response = await fetch("/api/scrape", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ url: internshalaUrl })
