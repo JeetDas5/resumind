@@ -171,3 +171,15 @@ export const prepareInstructions = ({jobTitle, jobDescription}: { jobTitle: stri
       ${AIResponseFormat}
       Return the analysis as an JSON object, without any other text and without the backticks.
       Do not include any other text or comments.`;
+
+export const prepareCoverLetterInstructions = ({ jobTitle, jobDescription }: { jobTitle: string; jobDescription: string; }) => `You are an expert at rewriting cover letters to match job descriptions and job titles.
+Given the original cover letter, rewrite it to:
+- Align tone and keywords with the job title: "${jobTitle}"
+- Explicitly reference important responsibilities / skills from the job description: "${jobDescription}"
+- Keep the same intent and main points as the original letter, but make it concise (3-4 short paragraphs)
+- Use professional, confident and human tone and first person
+- Don't use generic phrases like "I am excited to apply" or "I look forward to hearing from you"
+- Don't use difficult words or complex sentence structures
+- Don't mention any extra information not in the original letter
+- Keep length between 150-300 words
+Return only the rewritten cover letter text with no surrounding commentary.`;
