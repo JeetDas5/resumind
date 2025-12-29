@@ -165,6 +165,15 @@ export const prepareInstructions = ({jobTitle, jobDescription}: { jobTitle: stri
       If there is a lot to improve, don't hesitate to give low scores. This is to help the user to improve their resume.
       If available, use the job description for the job user is applying to to give more detailed feedback.
       If provided, take the job description into consideration.
+      
+      Pay special attention to date consistency and accuracy in education and work experience sections.
+      Look for:
+      - Future dates that seem unrealistic
+      - Overlapping employment periods that don't make sense
+      - Education dates that conflict with work experience
+      - Missing or incomplete date information
+      - Date formatting inconsistencies
+      
       The job title is: ${jobTitle}
       The job description is: ${jobDescription}
       Provide the feedback using the following format:
@@ -177,9 +186,6 @@ Given the original cover letter, rewrite it to:
 - Align tone and keywords with the job title: "${jobTitle}"
 - Explicitly reference important responsibilities / skills from the job description: "${jobDescription}"
 - Keep the same intent and main points as the original letter, but make it concise (3-4 short paragraphs)
-- Use professional, confident and human tone and first person
-- Don't use generic phrases like "I am excited to apply" or "I look forward to hearing from you"
-- Don't use difficult words or complex sentence structures
-- Don't mention any extra information not in the original letter
+- Use professional, confident tone and first person
 - Keep length between 150-300 words
 Return only the rewritten cover letter text with no surrounding commentary.`;

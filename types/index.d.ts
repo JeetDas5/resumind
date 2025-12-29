@@ -34,4 +34,18 @@ interface Feedback {
             type: "good" | "improve"; tip: string; explanation: string;
         }[];
     };
+    dateValidation?: {
+        score: number;
+        issues: DateValidationIssue[];
+        summary: string;
+    };
+}
+
+interface DateValidationIssue {
+    type: 'critical' | 'warning' | 'suggestion';
+    category: 'education' | 'work' | 'general';
+    message: string;
+    detectedDate: string;
+    suggestedFix?: string;
+    confidence: number;
 }

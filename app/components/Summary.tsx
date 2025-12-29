@@ -33,6 +33,9 @@ const Summary = ({feedback}: { feedback: Feedback }) => {
         <Category title="Content" score={feedback.content.score}/>
         <Category title="Structure" score={feedback.structure.score}/>
         <Category title="Skills" score={feedback.skills.score}/>
+        {feedback.dateValidation && (
+            <Category title="Date Validation" score={feedback.dateValidation.score}/>
+        )}
     </div>);
 };
 
