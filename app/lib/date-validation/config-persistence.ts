@@ -44,7 +44,8 @@ export class DateValidationConfigPersistence {
 
       let storedData: string | null = null;
       try {
-        storedData = await puterStore.kv.get(DateValidationConfigPersistence.CONFIG_KEY);
+        const result = await puterStore.kv.get(DateValidationConfigPersistence.CONFIG_KEY);
+        storedData = result ?? null;
         console.log('[DateValidationConfigPersistence] KV get operation completed:', {
           hasData: !!storedData,
           dataLength: storedData?.length || 0

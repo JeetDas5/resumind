@@ -113,7 +113,7 @@ const upload = () => {
             jobDescription,
             coverLetter: coverLetter || "",
             rephrasedCoverLetter: rephrasedCoverLetter || "",
-            feedback: ''
+            feedback: '' as any,
         };
 
         await kv.set(`resume:${uuid}`, JSON.stringify(data));
