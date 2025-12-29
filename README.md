@@ -9,7 +9,7 @@ Resumind lets you upload a resume (PDF), analyzes it with an AI model, and provi
 - Upload a PDF resume and optional job details (company, role, description)
 - The PDF is converted to a high‑quality preview image client‑side
 - The file and preview are stored via Puter’s client APIs
-- AI analysis runs using Puter AI (Claude 3.7 Sonnet) and returns a structured JSON feedback object
+- AI analysis runs using Puter AI (Claude Opus 4.5) and returns a structured JSON feedback object
 - You can review the full analysis and overall score, and open your PDF in a new tab
 
 ## Tech Stack
