@@ -6,7 +6,7 @@
     "build": "react-router build",
     "dev": "react-router dev",
     "start": "react-router-serve ./build/server/index.js",
-    "typecheck": "react-router typegen && tsc",
+    "typecheck": "tsc --noEmit",
     "dev:server": "ts-node server.ts"
   },
   "dependencies": {
