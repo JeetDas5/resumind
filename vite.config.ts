@@ -14,4 +14,13 @@ export default defineConfig({
       eslint: false, // Disable ESLint checker
     }),
   ],
+  server: {
+    proxy: {
+      "/latex-compile": {
+        target: "https://texlive.net",
+        changeOrigin: true,
+        rewrite: () => "/cgi-bin/latexcgi",
+      },
+    },
+  },
 });

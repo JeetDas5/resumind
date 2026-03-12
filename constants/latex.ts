@@ -128,7 +128,7 @@ function parseEducation(raw: string): EduEntry[] {
     const parts = withoutDates.split(/\s+(?:—|at)\s+|(?<=\S)\s+-\s+(?=\S)/);
     const degree = parts[0]?.trim() || withoutDates;
     const institution = parts[1]?.trim() || "";
-    const extra = lines.slice(1).join(" ");
+    const extra = lines.slice(1).join("\n");
 
     entries.push({ degree, institution, dates, extra });
   }
@@ -147,7 +147,7 @@ interface ProjectEntry {
   name: string;
   date: string;
   tech: string;
-  description: string;
+  description: string[];
   live: string;
   github: string;
 }
@@ -196,7 +196,7 @@ function parseProjects(raw: string): ProjectEntry[] {
       name,
       date,
       tech,
-      description: descLines.join(" "),
+      description: descLines,
       live,
       github,
     });
@@ -209,7 +209,7 @@ function parseSkills(raw: string): { category: string; skills: string }[] {
   if (!raw?.trim()) return [];
   return raw
     .split("\n")
-    .map((line) => line.trim())
+    .map((line) => line.trim().replace(/^[•\-\*]\s*/, ""))
     .filter(Boolean)
     .map((line) => {
       const colon = line.indexOf(":");
@@ -266,7 +266,11 @@ export function generateLatexResume(
     \\resumeSubheading
       {${escapeLaTeX(e.institution)}}{} 
       {${escapeLaTeX(e.degree)}}{${escapeLaTeX(e.dates)}}
-      ${e.extra ? `{\\scriptsize \\textit{\\footnotesize{${escapeLaTeX(e.extra)}}}}` : "\\vspace{1pt}"}
+      ${
+        e.extra
+          ? `{\\scriptsize \\textit{\\footnotesize{\\newline{}${escapeLaTeX(e.extra).replace(/\n/g, "\\newline{}")}}}}`
+          : "\\vspace{1pt}"
+      }
     \\resumeSubHeadingListEnd`
         )
         .join("\n")
@@ -325,7 +329,11 @@ export function generateLatexResume(
           (p) =>
             `    \\item \\textbf{${escapeLaTeX(p.name)}} \\hfill \\textit{${escapeLaTeX(p.date)}}
     \\vspace{1pt}
-    \\newline ${escapeLaTeX(p.description)}${p.tech ? `\\newline\n    \\textbf{Tech:} ${escapeLaTeX(p.tech)}` : ""}${
+    ${
+      Array.isArray(p.description)
+        ? p.description.map((d: string) => `\\newline • ${escapeLaTeX(d)}`).join("\n    ")
+        : `\\newline ${escapeLaTeX(p.description as unknown as string)}`
+    }${p.tech ? `\\newline\n    \\textbf{Tech:} ${escapeLaTeX(p.tech)}` : ""}${
       p.live
         ? `\n    \\newline \\textbf{Live:} \\href{${p.live}}{${escapeLaTeX(p.live)}}`
         : ""
@@ -377,7 +385,7 @@ ${escapeLaTeX(fields.summary)}
       : "";
 
   // ─── Assemble the full document ────────────────────────────────────────────
-  return `\\documentclass[a4paper,11pt]{article}
+  return `\\documentclass[a4paper,20pt]{article}
 
 \\usepackage{latexsym}
 \\usepackage[empty]{fullpage}
@@ -386,15 +394,16 @@ ${escapeLaTeX(fields.summary)}
 \\usepackage[usenames,dvipsnames]{color}
 \\usepackage{verbatim}
 \\usepackage{enumitem}
-\\usepackage[hidelinks,pdftex]{hyperref}
+\\usepackage[pdftex]{hyperref}
 \\usepackage{fancyhdr}
 
 \\pagestyle{fancy}
-\\fancyhf{}
+\\fancyhf{} % clear all header and footer fields
 \\fancyfoot{}
 \\renewcommand{\\headrulewidth}{0pt}
 \\renewcommand{\\footrulewidth}{0pt}
 
+% Adjust margins
 \\addtolength{\\oddsidemargin}{-0.530in}
 \\addtolength{\\evensidemargin}{-0.375in}
 \\addtolength{\\textwidth}{1in}
@@ -402,17 +411,27 @@ ${escapeLaTeX(fields.summary)}
 \\addtolength{\\textheight}{1in}
 
 \\urlstyle{rm}
+
 \\raggedbottom
 \\raggedright
 \\setlength{\\tabcolsep}{0in}
 
+% Sections formatting
 \\titleformat{\\section}{
   \\vspace{-10pt}\\scshape\\raggedright\\large
 }{}{0em}{}[\\color{black}\\titlerule \\vspace{-6pt}]
 
+%-------------------------
+% Custom commands
 \\newcommand{\\resumeItem}[2]{
   \\item\\small{
     \\textbf{#1}{: #2 \\vspace{-2pt}}
+  }
+}
+
+\\newcommand{\\resumeItemWithoutTitle}[1]{
+  \\item\\small{
+    {\\vspace{-2pt}}
   }
 }
 
@@ -426,7 +445,7 @@ ${escapeLaTeX(fields.summary)}
 
 \\newcommand{\\resumeSubItem}[2]{\\resumeItem{#1}{#2}\\vspace{-3pt}}
 
-\\renewcommand{\\labelitemii}{\\$\\circ\\$}
+\\renewcommand{\\labelitemii}{$\\circ$}
 
 \\newcommand{\\resumeSubHeadingListStart}{\\begin{itemize}[leftmargin=*]\\vspace{-5pt}}
 \\newcommand{\\resumeSubHeadingListEnd}{\\end{itemize}\\vspace{-7pt}}
@@ -446,13 +465,12 @@ ${escapeLaTeX(fields.summary)}
 \\end{center}
 
 \\begin{tabular*}{\\textwidth}{l@{\\extracolsep{\\fill}}r}
-${linkedinUser ? `    LinkedIn: \\href{https://linkedin.com/in/${linkedinUser}}{linkedin.com/in/${escapeLaTeX(linkedinUser)}} & ` : "    "}${phone ? `Mobile: ${escapeLaTeX(phone)}` : ""} \\\\
+${linkedinUser ? `    LinkedIn: \\href{https://www.linkedin.com/in/${linkedinUser}/}{linkedin.com/in/${escapeLaTeX(linkedinUser)}} & ` : "    "}${phone ? `Mobile: ${escapeLaTeX(phone)}` : ""} \\\\
 ${githubUser ? `    Github: \\href{https://github.com/${githubUser}}{github.com/${escapeLaTeX(githubUser)}} & ` : "    "}${email ? `Email: \\href{mailto:${email}}{${escapeLaTeX(email)}}` : ""} \\\\
 ${portfolio ? `    Portfolio: \\href{https://${portfolio}}{${escapeLaTeX(portfolio)}} & \\\\` : ""}
 \\end{tabular*}
+${summarySection ? `\n${summarySection}` : ""}
 
-${targetBanner}
-${summarySection}
 %-----------EDUCATION-----------------
 \\section{Education}
 \\vspace{2pt}
@@ -461,14 +479,15 @@ ${educationLatex}
 %-----------Skills-----------------
 \\vspace{-5pt}
 \\section{Skills Summary}
-\\vspace{2pt}
+\\vspace{2pt}  
 
 ${skillsLatex}
 
+
 %-----------Experience-----------------
-\\vspace{2pt}
+\\vspace{2pt}  
 \\section{Work Experience}
-\\vspace{2pt}
+\\vspace{2pt} 
 
 ${experienceLatex}
 
@@ -485,7 +504,6 @@ ${projectsSection}
 \\end{itemize}`
     : ""
 }
-
 ${certSection}
 
 \\vspace{-5pt}
@@ -495,38 +513,32 @@ ${certSection}
 }
 
 /**
- * Compile the LaTeX source via texlive.net's public API and return the PDF blob.
- * Throws on network error or non-200 response.
+ * Compile the LaTeX source via our Express server proxy (localhost:5000)
+ * which forwards to texlive.net with proper multipart encoding.
  */
 export async function compileLatexToPDF(latexSource: string): Promise<Blob> {
-  const form = new FormData();
-  const texBlob = new Blob([latexSource], { type: "text/plain" });
-  form.append("filecontents[]", texBlob, "resume.tex");
-  form.append("filename[]", "resume.tex");
-  form.append("engine", "pdflatex");
-  form.append("return", "pdf");
-
-  const response = await fetch("https://texlive.net/cgi-bin/latexcgi.pl", {
+  const response = await fetch("http://localhost:5000/api/latex", {
     method: "POST",
-    body: form,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ latex: latexSource }),
   });
 
   if (!response.ok) {
-    throw new Error(
-      `LaTeX compilation failed: ${response.status} ${response.statusText}`
-    );
+    let errorMsg = `LaTeX compilation failed: ${response.status}`;
+    try {
+      const err = await response.json();
+      if (err.error) errorMsg = err.error;
+      if (err.details) console.error("LaTeX details:", err.details);
+    } catch {
+      // ignore parse error
+    }
+    throw new Error(errorMsg);
   }
 
   const contentType = response.headers.get("content-type") || "";
   if (!contentType.includes("application/pdf")) {
-    // The service returns an error log as HTML when compilation fails
     const text = await response.text();
-    const match = text.match(/!.*?(?=\n)/);
-    throw new Error(
-      match
-        ? `LaTeX error: ${match[0]}`
-        : "Compilation returned non-PDF response"
-    );
+    throw new Error(`Non-PDF response: ${text.substring(0, 200)}`);
   }
 
   return response.blob();

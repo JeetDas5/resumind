@@ -43,12 +43,12 @@ const defaultFields = (): TemplateField[] => [
     id: "summary",
     label: "Professional Summary",
     description:
-      "A 3–4 sentence overview of your experience, strengths, and what you bring to this role",
+      "A concise 1–2 line overview of your experience and strengths (must fit in 2 lines max)",
     placeholder:
       "Results-driven software engineer with 3+ years of experience building scalable web applications...",
     value: "",
-    rows: 4,
-    required: true,
+    rows: 2,
+    required: false,
   },
   {
     id: "experience",
@@ -192,14 +192,35 @@ const OptimizePage = () => {
       .map((t: any) => `• ${t.tip}: ${t.explanation || ""}`)
       .join("\n");
 
+    // Pre-fill fullName and contact directly from parsedContent (no AI needed)
+    if (parsedContent.fullName) {
+      setFields((prev) =>
+        prev.map((f) =>
+          f.id === "fullName" ? { ...f, value: parsedContent.fullName } : f
+        )
+      );
+    }
+    if (parsedContent.contact) {
+      setFields((prev) =>
+        prev.map((f) =>
+          f.id === "contact" ? { ...f, value: parsedContent.contact } : f
+        )
+      );
+    }
+
+    // Fill ALL other fields with AI (excluding certifications since it's optional)
     const fieldsToFill = defaultFields().filter(
-      (f) => f.required && f.id !== "fullName" && f.id !== "contact"
+      (f) => f.id !== "fullName" && f.id !== "contact" && f.id !== "certifications"
     );
     let done = 0;
 
     for (const field of fieldsToFill) {
       setFillingField(field.id);
       try {
+        const isSummary = field.id === "summary";
+        const isSkills = field.id === "skills";
+        const isExperience = field.id === "experience";
+        const isProjects = field.id === "projects";
         const prompt = `You are an expert resume writer. Generate optimized content for the "${field.label}" section of a resume.
 
 Target Job: ${resumeData.jobTitle || "Software Developer"} at ${resumeData.companyName || "a tech company"}
@@ -217,7 +238,15 @@ Instructions:
 - Output ONLY the section content, no headers, no explanations
 - Make it ATS-friendly with keywords from the job description
 - Use strong action verbs and quantifiable achievements
-- Be concise but impactful
+- KEEP EVERY POINT VERY COMPACT — no unnecessary words, only relevant info
+- The ENTIRE resume must fit on 1 page, so be extremely concise
+- Use short bullet points with measurable impact (numbers, percentages)
+- Remove filler words and redundant phrases
+${isSummary ? "- CRITICAL: Professional Summary MUST be maximum 2 lines (under 180 characters). Write a single dense sentence or two short sentences max." : ""}
+${isSkills ? "- CRITICAL: List a maximum of 5 distinct skills or skill categories. Do not exceed 5 points.\n- CRITICAL FORMAT: For skills, you MUST strictly use the format 'Category Name: Skill 1, Skill 2 etc'. Do NOT use bullet points (no hyphens or asterisks) at the start of the line." : ""}
+${isExperience ? "- CRITICAL: Limit the bullet points for EACH experience/role to a maximum of 3 bullet points." : ""}
+${field.id === "education" ? "- CRITICAL FORMAT: Each education entry MUST strictly follow the first-line format 'Degree — Institution (StartYear - EndYear)'. Add extra info on the next lines." : ""}
+${isProjects ? "- CRITICAL FORMAT: Separate different projects by TWO newlines. Each project MUST strictly follow this exact structure:\nLine 1: Project Name | Tech Stack | Date\nLine 2: • first bullet point describing impact\nLine 3: • second bullet point\nLine 4: Tech: technologies used (optional)\nLine 5: Live: link (optional)\nLine 6: GitHub: link (optional)" : ""}
 - For "${field.label}" specifically: ${field.description}`;
 
         const response = await ai.chat([
@@ -240,6 +269,12 @@ Instructions:
           .replace(/^```[a-z]*\n?/i, "")
           .replace(/```$/i, "")
           .trim();
+
+        // Enforce summary max 2 lines
+        if (isSummary) {
+          const lines = text.split("\n").filter((l: string) => l.trim());
+          text = lines.slice(0, 2).join(" ").trim();
+        }
 
         setFields((prev) =>
           prev.map((f) => (f.id === field.id ? { ...f, value: text } : f))

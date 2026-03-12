@@ -67,147 +67,97 @@ const ScoreRing = ({
   );
 };
 
-// ─── Resume print template ─────────────────────────────────────────────────────
-const ResumeDocument = ({ data }: { data: any }) => {
-  const fields = data.optimizedFields || {};
+// ─── LaTeX PDF Preview Component ────────────────────────────────────────────────
+const LatexPDFPreview = ({ data }: { data: any }) => {
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [status, setStatus] = useState<
+    "idle" | "generating" | "compiling" | "done" | "error"
+  >("idle");
+  const [errorMsg, setErrorMsg] = useState("");
 
-  const Section = ({ title, content }: { title: string; content: string }) => {
-    if (!content?.trim()) return null;
+  useEffect(() => {
+    if (!data?.optimizedFields) return;
+    let cancelled = false;
+
+    const buildPDF = async () => {
+      setStatus("generating");
+      try {
+        const latexSrc = generateLatexResume(
+          data.optimizedFields,
+          data.jobTitle,
+          data.companyName
+        );
+
+        setStatus("compiling");
+        const pdfBlob = await compileLatexToPDF(latexSrc);
+        if (cancelled) return;
+
+        const url = URL.createObjectURL(pdfBlob);
+        setPdfUrl(url);
+        setStatus("done");
+      } catch (err: any) {
+        if (cancelled) return;
+        console.error("LaTeX preview compilation error:", err);
+        setErrorMsg(err?.message || "Failed to compile LaTeX");
+        setStatus("error");
+      }
+    };
+
+    buildPDF();
+    return () => {
+      cancelled = true;
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+    };
+  }, [data]);
+
+  if (status === "idle" || status === "generating" || status === "compiling") {
     return (
-      <div style={{ marginBottom: "18px" }}>
-        <div
-          style={{
-            borderBottom: "2px solid #6366f1",
-            paddingBottom: "3px",
-            marginBottom: "8px",
-            color: "#6366f1",
-            fontWeight: 700,
-            fontSize: "13px",
-            letterSpacing: "1.5px",
-            textTransform: "uppercase",
-          }}
-        >
-          {title}
-        </div>
-        <div
-          style={{
-            whiteSpace: "pre-wrap",
-            lineHeight: 1.6,
-            fontSize: "12px",
-            color: "#1f2937",
-          }}
-        >
-          {content}
-        </div>
+      <div
+        className="flex flex-col items-center justify-center gap-4 py-20"
+        style={{ minHeight: "600px" }}
+      >
+        <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
+        <p className="text-gray-500 text-sm font-medium">
+          {status === "generating"
+            ? "Building LaTeX source…"
+            : "Compiling PDF via texlive.net (~15s)…"}
+        </p>
       </div>
     );
-  };
+  }
+
+  if (status === "error") {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-16 px-6 text-center">
+        <span className="text-4xl">⚠️</span>
+        <p className="text-gray-600 text-sm">{errorMsg}</p>
+        <p className="text-gray-400 text-xs">
+          Download the LaTeX PDF using the button above, or paste the .tex file
+          into{" "}
+          <a
+            href="https://overleaf.com"
+            target="_blank"
+            rel="noreferrer"
+            className="underline text-indigo-500 font-semibold"
+          >
+            overleaf.com
+          </a>
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div
-      id="resume-print"
+    <iframe
+      src={pdfUrl!}
+      title="LaTeX Resume Preview"
       style={{
-        fontFamily: "'Georgia', 'Times New Roman', serif",
-        padding: "40px 48px",
-        background: "#ffffff",
-        color: "#1f2937",
-        maxWidth: "794px",
-        margin: "0 auto",
-        minHeight: "1122px",
-        boxSizing: "border-box",
+        width: "100%",
+        height: "800px",
+        border: "none",
+        background: "#f8f9fa",
       }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          textAlign: "center",
-          marginBottom: "24px",
-          borderBottom: "3px solid #6366f1",
-          paddingBottom: "16px",
-        }}
-      >
-        <h1
-          style={{
-            fontSize: "28px",
-            fontWeight: 800,
-            color: "#111827",
-            margin: 0,
-            fontFamily: "Arial, sans-serif",
-            letterSpacing: "-0.5px",
-          }}
-        >
-          {fields.fullName || data.jobTitle || "Your Name"}
-        </h1>
-        {fields.contact && (
-          <p
-            style={{
-              fontSize: "11px",
-              color: "#6b7280",
-              marginTop: "6px",
-              lineHeight: 1.5,
-              fontFamily: "Arial, sans-serif",
-            }}
-          >
-            {fields.contact}
-          </p>
-        )}
-        {(data.jobTitle || data.companyName) && (
-          <div
-            style={{
-              display: "inline-block",
-              marginTop: "8px",
-              background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-              color: "#fff",
-              fontSize: "11px",
-              fontWeight: 600,
-              padding: "3px 14px",
-              borderRadius: "999px",
-              fontFamily: "Arial, sans-serif",
-            }}
-          >
-            Applying for: {data.jobTitle}
-            {data.companyName ? ` at ${data.companyName}` : ""}
-          </div>
-        )}
-      </div>
-
-      {/* Body */}
-      {fields.summary && (
-        <Section title="Professional Summary" content={fields.summary} />
-      )}
-      {fields.experience && (
-        <Section title="Work Experience" content={fields.experience} />
-      )}
-      {fields.education && (
-        <Section title="Education" content={fields.education} />
-      )}
-      {fields.skills && (
-        <Section title="Technical Skills" content={fields.skills} />
-      )}
-      {fields.projects && (
-        <Section title="Projects" content={fields.projects} />
-      )}
-      {fields.certifications && (
-        <Section
-          title="Certifications & Awards"
-          content={fields.certifications}
-        />
-      )}
-
-      {/* Footer watermark */}
-      <div
-        style={{
-          textAlign: "center",
-          marginTop: "32px",
-          fontSize: "9px",
-          color: "#d1d5db",
-          fontFamily: "Arial, sans-serif",
-        }}
-      >
-        Generated by Resumind AI • ATS Score: {data.feedback?.overallScore || 0}
-        /100
-      </div>
-    </div>
+    />
   );
 };
 
@@ -257,52 +207,6 @@ const ResultPage = () => {
     };
     if (id) load();
   }, [id]);
-
-  const handleDownloadPDF = async () => {
-    setDownloading(true);
-    try {
-      // Use the browser's print dialog targeted at just the resume div
-      const resumeEl = document.getElementById("resume-print");
-      if (!resumeEl) throw new Error("Resume element not found");
-
-      const printWindow = window.open("", "_blank", "width=900,height=1200");
-      if (!printWindow) throw new Error("Popup blocked");
-
-      printWindow.document.write(`
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${resumeData?.optimizedFields?.fullName || "Resume"} - Optimized Resume</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { background: white; }
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      @page { margin: 0; size: A4; }
-    }
-  </style>
-</head>
-<body>
-  ${resumeEl.outerHTML}
-</body>
-</html>`);
-      printWindow.document.close();
-      printWindow.focus();
-      setTimeout(() => {
-        printWindow.print();
-        printWindow.close();
-      }, 500);
-      showToast('Opening print dialog — choose "Save as PDF"!', "success");
-    } catch (err) {
-      console.error("Download error:", err);
-      showToast(
-        "Could not open print dialog. Try right-clicking the resume.",
-        "error"
-      );
-    }
-    setDownloading(false);
-  };
 
   const handleCopyText = () => {
     if (!resumeData?.optimizedText) return;
@@ -434,19 +338,6 @@ const ResultPage = () => {
             📋 Copy Text
           </button>
           <button
-            onClick={handleDownloadPDF}
-            disabled={downloading}
-            className="px-5 py-2 rounded-full text-sm font-bold border-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50 transition-all disabled:opacity-60 flex items-center gap-2"
-          >
-            {downloading ? (
-              <>
-                <span className="animate-spin">⟳</span> Opening…
-              </>
-            ) : (
-              <>🖨️ HTML PDF</>
-            )}
-          </button>
-          <button
             onClick={handleLatexPDF}
             disabled={
               latexStatus === "generating" || latexStatus === "compiling"
@@ -474,7 +365,7 @@ const ResultPage = () => {
             ) : latexStatus === "error" ? (
               <>⚠️ .tex Downloaded</>
             ) : (
-              <>⬇️ LaTeX PDF</>
+              <>⬇️ Download LaTeX PDF</>
             )}
           </button>
         </div>
@@ -546,16 +437,18 @@ const ResultPage = () => {
 
         {/* Two-column layout: resume + tips */}
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-8">
-          {/* Resume Preview — spans 3 cols */}
+          {/* Resume Preview — spans 3 cols — now shows LaTeX PDF */}
           <div className="xl:col-span-3">
             <div className="bg-white rounded-3xl shadow-lg border border-gray-100 overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
                 <h2 className="font-bold text-gray-900 text-lg flex items-center gap-2">
-                  📄 Resume Preview
+                  📄 Resume Preview (LaTeX PDF)
                 </h2>
                 <button
-                  onClick={handleDownloadPDF}
-                  disabled={downloading}
+                  onClick={handleLatexPDF}
+                  disabled={
+                    latexStatus === "generating" || latexStatus === "compiling"
+                  }
                   className="px-5 py-2 rounded-full text-sm font-bold text-white flex items-center gap-2 transition-all shadow hover:shadow-md disabled:opacity-60"
                   style={{
                     background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
@@ -564,17 +457,9 @@ const ResultPage = () => {
                   ⬇️ Download PDF
                 </button>
               </div>
-              {/* Scrollable resume */}
-              <div
-                ref={printRef}
-                className="overflow-auto"
-                style={{ maxHeight: "800px", background: "#f8f9fa" }}
-              >
-                <div className="p-4">
-                  <div className="shadow-md">
-                    <ResumeDocument data={resumeData} />
-                  </div>
-                </div>
+              {/* LaTeX PDF preview */}
+              <div ref={printRef} style={{ background: "#f8f9fa" }}>
+                <LatexPDFPreview data={resumeData} />
               </div>
             </div>
           </div>
@@ -715,12 +600,6 @@ const ResultPage = () => {
                   to get the PDF.
                 </p>
               )}
-              <button
-                onClick={handleDownloadPDF}
-                className="w-full px-5 py-3 rounded-full font-semibold text-indigo-700 border-2 border-indigo-200 hover:bg-indigo-50 transition-all text-sm"
-              >
-                🖨️ HTML PDF (Print)
-              </button>
               <button
                 onClick={handleCopyText}
                 className="w-full px-5 py-3 rounded-full font-semibold text-gray-700 border border-gray-300 hover:bg-gray-100 transition-all text-sm"
