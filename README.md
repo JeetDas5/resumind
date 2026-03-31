@@ -33,7 +33,7 @@ No server‑side environment variables are required. All integrations are client
 
 ## Live Demo
 
-- Deployed app: https://puter.com/app/jeet-ai-resume-analyzer
+- Deployed app: [resumind.jeetdas.site](https://resumind.jeetdas.site)
 
 ## Getting Started
 
