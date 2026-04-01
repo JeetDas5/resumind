@@ -293,7 +293,7 @@ export const usePuterStore = create<PuterStore>((set, get) => {
             }, {
                 type: "text", text: message,
             },],
-        },], { model: "claude-opus-4.5" }) as Promise<AIResponse | undefined>;
+        },], { model: "claude-sonnet-4.5" }) as Promise<AIResponse | undefined>;
     };
 
     const img2txt = async (image: string | File | Blob, testMode?: boolean) => {

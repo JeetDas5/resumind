@@ -1,0 +1,438 @@
+# Resumind — Technical Documentation (Expanded for Research Paper)
+
+Author: Jeet Das
+Project: Resumind — AI Resume Analyzer
+File: ai-resume-analyser/documentation.txt
+Date: (generated)
+
+---
+
+Table of contents
+1. Abstract
+2. Goals and Research Questions
+3. System Overview and Architectural Diagram (logical)
+4. Detailed Component Design
+   - 4.1 Puter Integration: design, APIs, and rationale
+   - 4.2 Client Application (React SPA) responsibilities
+   - 4.3 File handling and lifecycle (PDF ↔ PNG ↔ text)
+   - 4.4 PDF-to-text extraction approaches (heuristic & AI-driven)
+   - 4.5 Date validation engine: heuristics, regexes, scoring
+   - 4.6 AI prompting, JSON schema and micro-prompting strategy
+   - 4.7 Optimization pipeline (field-by-field rewriting)
+   - 4.8 LaTeX generation and PDF compilation pipeline
+5. Data models and storage formats
+6. Security, privacy, and threat model
+7. Evaluation methodology for a research study
+8. Implementation notes, limitations and future work
+9. Reproducibility checklist and experiment artifacts
+10. References and acknowledgements
+
+---
+
+1. Abstract
+-----------
+Resumind is a client-centric resume analysis and optimization system that integrates browser-side preprocessing with cloud-hosted LLM capabilities via a BaaS (Puter). The system ingests PDF resumes, performs deterministic pre-processing (including date validation heuristics and visual preview generation), uses LLMs to extract and score resume content according to a strict JSON schema, and then performs iterative, constraint-driven optimizations to generate ATS-friendly, one-page resumes. This document describes system internals and algorithms in sufficient detail for reproduction and evaluation in an academic context.
+
+Research goals:
+- Demonstrate a hybrid deterministic + LLM architecture for resume analysis.
+- Quantify the effect of iterative micro-prompting and deterministic constraints on ATS scores.
+- Provide reproducible procedures for evaluating extraction fidelity and optimization effectiveness.
+
+---
+
+2. Goals and Research Questions
+-------------------------------
+Primary questions you might investigate with Resumind:
+- How effective is a deterministic date-validation stage at catching timeline anomalies compared to LLM-only analysis?
+- Does micro-prompting (field-by-field) yield more reliable optimizations than one-shot full-document rewrites?
+- How do explicit structural constraints (limit bullets, enforce skill formatting, summary length) affect the LLM output's fidelity and ATS scores?
+- What are the privacy trade-offs when using client-side BaaS integration versus centralized processing?
+
+---
+
+3. System Overview and Architecture
+-----------------------------------
+High-level components:
+- Client SPA (React 19 + Vite) running completely in-browser (SSR disabled).
+- Puter (client-side BaaS) providing: Authentication (`puter.auth`), File Storage (`puter.fs`), Key-Value persistence (`puter.kv`), and AI gateway (`puter.ai`).
+- Optional local proxy (small Express endpoint) used to compile LaTeX via a remote texlive service (texlive.net).
+- External scraping route (server-side route inside SPA server bundle) for ingesting job descriptions from public URLs using `cheerio` + `axios`.
+
+Logical data flows (sequence):
+1. User uploads a PDF resume.
+2. Client renders the first PDF page to a PNG for preview (pdfjs-dist + canvas).
+3. PDF and PNG are uploaded to Puter file storage.
+4. Client runs deterministic date validation on resume text (fast heuristics).
+5. Client requests AI analysis via Puter (file payload + job description + instructions).
+6. Puter proxies the file and prompt to an LLM, returning strict JSON feedback.
+7. Client stores analysis in Puter KV and displays results.
+8. User may run optimization: iterative field-by-field AI prompts generate optimized fields.
+9. Fields are reassembled into a one-page plain-text resume and re-scored via AI.
+10. User can generate a LaTeX formatted resume based on the optimized fields and compile to PDF via the LaTeX compile service.
+
+---
+
+4. Detailed Component Design
+----------------------------
+
+4.1 Puter Integration — what Puter is and how it works in this system
+--------------------------------------------------------------------
+Role of Puter:
+- Puter is used as a client-side BaaS: it provides authentication, ephemeral file storage, a key-value store, and an AI interface which proxies requests to LLM providers (Claude family in the code).
+- The project uses the Puter client SDK (`window.puter` or an npm fallback `@heyputer/puter.js`) through a small wrapper `app/lib/puter.ts` that exposes typed convenience methods (`auth`, `fs`, `kv`, `ai`) via a Zustand store.
+
+Why Puter:
+- Eliminates the need for the developer to run and secure a centralized backend for storing user files and API keys.
+- Enables the application to remain largely serverless: all persistent objects are stored per-user in Puter KV or FS, minimizing developer access to user data.
+
+Key APIs used:
+- Authentication:
+  - isSignedIn(), signIn(), signOut(), getUser()
+- FS:
+  - fs.write(path, data) — write a blob/file
+  - fs.read(path) — read blob
+  - fs.upload(files) — bulk upload helper
+  - fs.delete(path)
+  - fs.readdir(path)
+- KV:
+  - kv.set(key, value) — store JSON string under `resume:<uuid>`
+  - kv.get(key)
+  - kv.list(pattern)
+  - kv.del / kv.delete(key)
+- AI:
+  - ai.chat(prompt, options) — general chat interface
+  - ai.img2txt(image) — image-to-text helper
+  - ai.chat with file payloads — the code uses `puter.ai.chat` with `{ type: "file", puter_path: path }` in the prompt payload to instruct the backend to read the file content before passing it to the LLM. The `feedback` wrapper demonstrates this.
+
+Privacy model:
+- Data is stored in user-specific Puter buckets and KV; Resumind does not centrally collect user resume files or parsed results beyond what is stored in each user's Puter account.
+- The developer should document and disclose to users where LLM calls are proxied (Puter → LLM provider) and whether Puter or the LLM provider persists prompts/responses.
+
+4.2 Client Application Responsibilities
+--------------------------------------
+- Upload UI, file validation (only PDF).
+- Visual preview generation (first-page PNG).
+- Running deterministic validators (date validation).
+- Orchestrating AI prompts and parsing responses.
+- Persisting analysis and optimized artifacts to Puter KV.
+- Providing an interactive optimization editor (field-by-field).
+- LaTeX generation from user-approved optimized fields.
+
+4.3 File handling lifecycle (PDF → PNG → storage)
+--------------------------------------------------
+High-level steps (implemented in `app/lib/PdfToImage.ts` and upload routes):
+1. User selects a PDF file from the browser.
+2. The file is validated (MIME type and size).
+3. The first page is loaded via `pdfjs-dist`:
+   - `pdfjsLib.getDocument({ data: arrayBuffer })` -> document.
+   - `pdf.getPage(1)` -> render page to an offscreen canvas.
+4. The canvas is serialized via `canvas.toBlob()` (PNG) with a quality parameter to produce a high-quality preview.
+5. Both the original PDF blob and the generated PNG blob are written to Puter FS (e.g., `/resumes/<uuid>.pdf`, `/images/<uuid>.png`).
+6. Puter returns storage metadata (paths) which are saved into KV with the analysis metadata.
+
+Rationale:
+- Providing a preview avoids fetching or opening the heavy PDF directly and offers an immediate, rendered visual cue to users.
+- Storing both PDF and PNG ensures the original binary is preserved for future operations (AI analysis, downloads).
+
+4.4 PDF-to-text extraction — two complementary approaches
+---------------------------------------------------------
+Resumind uses two complementary approaches to extract text for different purposes:
+
+A. Lightweight direct text extraction (client-side blob text)
+- Implemented as a simple fallback: `resumeBlob.text()` (where `resumeBlob` is the PDF Blob read via Puter FS).
+- This attempt will typically yield no usable text for binary PDF streams (unless PDF happens to include embedded plain text).
+- The code uses this approach primarily for fast, local, deterministic tasks such as date validation heuristics where basic substring scans suffice.
+- Benefits: instant, no external API calls.
+- Limitations: rarely reliable for PDF text extraction (binary streams, compression, encoding).
+
+B. Multi-modal AI-based extraction via Puter AI
+- For semantic extraction, Resumind relies on the Puter AI gateway. The client composes an AI prompt that includes a file reference:
+  - The prompt payload includes an object like `{ type: "file", puter_path: "/resumes/<uuid>.pdf" }`, instructing the Puter backend to open and pass the file contents (or do OCR) to the LLM.
+- The LLM is instructed to return a strict JSON schema (see AIResponseFormat) containing `parsedContent` with fields such as `fullName`, `contact`, `summary`, `experience`, `education`, `skills`, `projects`, and `certifications`.
+- Advantages:
+  - The LLM / Puter pipeline can do multi-modal extraction (PDF file ingestion, delegated OCR, and semantic parsing).
+  - Robust to many PDF encodings and layouts.
+- Risks:
+  - LLM hallucination: must be mitigated via strict schema enforcement and post-parsing checks.
+  - Latency and cost (external LLM calls).
+
+OCR fallback:
+- Puter.ai.img2txt exists and can be used when the resume is a scanned image PDF. The workflow is:
+  1. Convert PDF to image per page on client using `pdfjs-dist` (or ask Puter backend to rasterize).
+  2. Call `ai.img2txt(imageBlob)` to perform OCR and obtain text.
+  3. Feed that text into the date validator and AI prompts.
+
+Design decisions:
+- Deterministic heuristics run first to catch obvious structural errors (dates, overlap) and to provide the LLM extra context in a structured, high-signal way.
+- The LLM is used for semantic extraction, scoring, and optimization, with the client responsible for sanitizing responses (strip code fences, parse JSON) and validating parsed fields.
+
+4.5 Date Validation Engine (app/lib/dateValidation.ts)
+-------------------------------------------------------
+Purpose:
+- Detect timeline anomalies (future dates, overlaps, impossible sequences), inconsistencies in education/work dates, and provide a compact diagnostic summary for the LLM.
+
+Architecture:
+- The engine is class-based (`DateValidationService`) with configurable thresholds:
+  - `maxFutureEducationYears`: how far into the future an education end date can be considered plausible.
+  - `maxFutureWorkMonths`: how far into the future for work experience end dates.
+  - `enableTypoDetection`: (boolean) to flag suspicious single-digit typos (e.g., 201 vs 2021).
+- The service exposes `validateResumeDates(resumeText: string)` which returns:
+  - `isValid` boolean
+  - `issues`: array of detailed issues (type, category, message, detectedDate, suggestedFix, confidence)
+  - `warnings` and `suggestions` lists
+  - `summary` string suitable for including in LLM prompts
+
+Key heuristics:
+- Pattern matching: the engine scans the resume text for patterns such as:
+  - Year-only: `(19|20)\d{2}` and common joined forms like `2018 - 2020`, `Jan 2019 - Present`, `Dec 2017 – Feb 2019`.
+  - Month-year patterns: `(?:Jan|Feb|...)\s+\d{4}` (case-insensitive).
+  - Common separators: `-`, `–`, `to`, `—`, `|`, parentheses `(...)`.
+- Overlap detection:
+  - Extract intervals (start date, end date or Present).
+  - Convert to numeric representations and check interval overlaps among jobs.
+  - If overlaps exist where the "roles" are full-time and dates overlap without explicit mention of part-time/consulting, flag as critical.
+- Future-date detection:
+  - Compare extracted years to current date and configured thresholds.
+  - If end date is in future beyond thresholds, flag critical or warning based on magnitude.
+- Intent recognition:
+  - Some text like "expected graduation" or "anticipated" is considered intentional future date; the engine differentiates by scanning nearby context for indicators like "expected", "anticipated", "planned", "expected in".
+- Typo detection:
+  - Values that differ drastically from expected "year" patterns or contain single-digit errors (e.g., `20021`) are heuristically flagged.
+- Scoring/penalty:
+  - Critical issues: -25 points each.
+  - Warnings: -10 points each.
+  - Suggestions: -5 points each.
+  - Final date-validation score: 100 minus aggregated deductions bounded at 0.
+
+Why deterministic first:
+- Deterministic checks are cheap, interpretable, and provide structured signals to the LLM, increasing the LLM's ability to focus on content improvement rather than basic sanity checks.
+
+4.6 AI prompting strategy and enforced JSON schema
+--------------------------------------------------
+Prompting design:
+- The system crafts strong, explicit prompts to the LLM via `puter.ai.chat`.
+- Prompt elements:
+  - System/instruction preamble ("You are an expert in ATS (Applicant Tracking System) and resume analysis.")
+  - Strict JSON schema to return (AIResponseFormat) — the system requires the LLM to return only JSON and nothing else.
+  - Job Title / Job Description context for role-specific feedback.
+  - (Optional) date validation summary appended to primes the AI about detected timeline anomalies.
+
+AIResponseFormat (schema highlights):
+- Top-level: `overallScore` (0–100), `parsedContent`, `ATS`, `toneAndStyle`, `content`, `structure`, `skills`.
+- Each category contains `score` and `tips[]`; `tips` for `toneAndStyle`, `content`, `structure`, `skills` include `explanation` fields.
+- `parsedContent` contains discrete extracted sections suitable for optimization and LaTeX generation.
+
+Sanitization:
+- The client strips code fences (```json``` or ``` ) and attempts to parse the first valid JSON payload found in the response.
+- On parse failure, the client provides a fallback (default scores) and surfaces a user-friendly error.
+
+Micro-prompting for optimization:
+- Rather than a single large rewrite request, the optimization procedure:
+  1. Pre-fills trivial fields (`fullName`, `contact`) from parsedContent.
+  2. Iteratively requests optimized content for each target field (summary, skills, experience, education, projects).
+  3. For each field, the prompt includes:
+     - The job title + description.
+     - Existing parsed content for that field.
+     - A short list of AI-generated improvement tips from the analysis phase.
+     - Hard constraints and formatting rules (e.g., summary length < 180 chars, skills max 5 categories in `Category: skills` format, experience max 3 bullets per role).
+- Each field request returns only the optimized section text. The client enforces constraints on the returned text (truncation, reformatting) when necessary.
+
+Why micro-prompting?
+- Smaller, focused prompts reduce hallucination and make it easier to validate and constrain output.
+- They enable stepwise human-intervention: the user can edit fields between AI generation steps.
+
+4.7 Re-scoring and assembly
+--------------------------
+- After generating optimized fields, the client assembles a plaintext one-page resume (concatenation of fields in canonical order).
+- The assembled text is sent to an AI scoring prompt (acting as an ATS expert) which returns a JSON object similar to the initial analysis schema but representing the optimized resume.
+- This allows a before/after comparison and quantifies improvement with consistent metrics.
+
+4.8 LaTeX generation and PDF compilation
+----------------------------------------
+LaTeX generation:
+- The project contains `constants/latex.ts` which:
+  - Provides `escapeLaTeX()` to sanitize raw text (escape special LaTeX characters).
+  - Parses free-text `experience`, `education`, `projects`, and `skills` fields into structured units using `parseExperience`, `parseEducation`, `parseProjects`, `parseSkills`.
+  - Uses a pre-defined LaTeX template / preamble and fills in template macros and itemize blocks.
+  - The result is a `.tex` string representing a polished resume designed to fit on one page (A4) with custom commands for consistent styling.
+
+Why LaTeX:
+- LaTeX gives deterministic, high-fidelity layout control and produces publication-quality PDFs, desirable for research reproducibility and controlled layout (important when measuring things like character counts, layout density, and visual hierarchy).
+
+PDF compilation pipeline:
+- The client provides `compileLatexToPDF(latexSource)` that sends the `.tex` source via POST to an Express proxy service (local or server) at `/api/latex`.
+- The proxy forwards the request to a third-party LaTeX compile service (the code references `texlive.net`) or uses a texlive container to compile `.tex` to PDF.
+- The compiled PDF blob is then returned to the client for preview or download. If compilation fails (timeout, service error), the `.tex` source is returned for manual use (e.g., upload to Overleaf).
+
+Notes on reproducibility:
+- The LaTeX template and compile pipeline should be versioned and included in experiment artifacts. If you plan to evaluate visual fidelity or character density, ensure you use the same LaTeX engine and package versions across runs.
+
+---
+
+5. Data models and storage formats
+---------------------------------
+Persistent KV object (`resume:<uuid>`) — canonical shape (JSON):
+- id: uuid
+- resumePath: string — Puter FS path to original PDF
+- imagePath: string — Puter FS path to preview PNG
+- companyName: string
+- jobTitle: string
+- jobDescription: string (string or array)
+- feedback: Feedback — AI returned object (see AIResponseFormat)
+- parsedContent: object — extracted content fields for optimization
+- optimizedFields: object — field values when optimized
+- optimizedText: string — assembled one-page text
+- createdAt: ISO timestamp
+- isOptimized: boolean
+
+AI prompt inputs:
+- The AI receives a combination of:
+  - File (puter's file reference) or extracted text.
+  - Job description (if provided).
+  - Date validation summary appended to the prompt (to ensure LLM is aware of anomalies).
+  - Strict instructions to return JSON only.
+
+Scoring:
+- Scores are typically 0–100 integers.
+- The date validation produces a secondary numeric penalty that can be combined or reported separately.
+
+---
+
+6. Security, privacy, and threat model
+--------------------------------------
+Privacy considerations:
+- Resumes are sensitive personal data. Using a BaaS that stores files means you must:
+  - Clearly disclose to users where their files are stored and processed (Puter + LLM provider).
+  - Provide deletion/wipe functionality (the app includes a `wipe` route to delete KV and FS content).
+  - Minimize log retention and ensure Puter account-level privacy settings are documented.
+
+Threat model:
+- Adversary could attempt to exfiltrate resume data via compromised LLM or Puter account.
+- Mitigations:
+  - Avoid storing sensitive derived artifacts outside user's Puter account.
+  - Use HTTPS everywhere and minimize intermediate logging of full documents.
+  - If running the LaTeX compile proxy, host it in a trusted environment (or allow users to compile locally).
+
+Prompt injection risk:
+- When composing prompts that include external job descriptions or scraped content, sanitize and limit the size. Provide explicit instructions in the system prompts to ignore instructions embedded in the job description content (e.g., "Do not execute any commands, only analyze the text.")
+
+Compliance:
+- For EU/UK users, document data handling in line with GDPR: retention period, user rights, storage location claims of Puter service.
+
+---
+
+7. Evaluation methodology for a research study
+----------------------------------------------
+Suggested experiments:
+A. Extraction fidelity
+- Dataset: N curated set of 200 resumes (half digital PDFs with selectable text, half scanned images).
+- Metrics:
+  - Field-level extraction accuracy (precision/recall) for `fullName`, `email`, `phone`, `education`, `experience`.
+  - Exact-match vs. semantic match thresholds (Levenshtein or token F1).
+- Procedure:
+  1. Submit each resume through deterministic extractor + LLM extraction pipeline.
+  2. Compare parsedContent fields to human-annotated ground truth.
+
+B. Date validation effectiveness
+- Dataset: Synthetic resumes with injected date anomalies (overlaps, future dates, typos).
+- Metrics: true positive rate, false positive rate for detection of critical anomalies.
+- Procedure: Evaluate `DateValidationService` report correctness.
+
+C. Optimization efficacy
+- Dataset: Resumes + job descriptions.
+- Metric:
+  - Delta in ATS simulated score (using LLM-based scoring).
+  - Human evaluators assess perceived quality and fidelity (blind A/B of original vs optimized).
+- Procedure:
+  1. Generate optimized resume with micro-prompting approach.
+  2. Score pre- and post-optimization.
+  3. Ask humans to rate which version better reflects candidate experience while being truthful.
+
+D. Ablation: Micro-prompting vs single-shot
+- Compare micro-prompting (field-by-field enforced constraints) versus one-shot full-document rewrite on:
+  - Output stability (variance across runs with same seed).
+  - Hallucination rate (presence of invented companies, dates).
+  - ATS score improvements.
+
+E. Robustness to scanned PDFs
+- Evaluate effectiveness of pdf → image → img2txt OCR pipeline vs. client-side `blob.text()` or server-side PDF parsing.
+
+Statistical reporting:
+- Use paired t-tests or Wilcoxon signed-rank tests for score deltas.
+- Report effect sizes and confidence intervals.
+
+---
+
+8. Implementation notes, limitations and future work
+---------------------------------------------------
+Implementation notes (from codebase):
+- React + Zustand provide lightweight state management. `app/lib/puter.ts` centralizes Puter interactions and fallback loading of the Puter SDK when CDN script fails.
+- Strict JSON schema enforcement is implemented via prompt instructions and client-side sanitization; nevertheless, robust schema validation is necessary for production (e.g., JSON schema + runtime checks).
+- LaTeX compile is delegated to a server proxy; service reliability can be a bottleneck.
+- The date validation service is rich in heuristics but depends on the quality of the input text.
+
+Limitations:
+- Reliance on an external LLM: latency, cost, and potential for hallucination.
+- Deterministic PDF-to-text extraction on the client is unreliable; the system depends on LLM-assisted extraction for high fidelity.
+- The evaluation uses the same LLM for scoring and generation, creating an evaluator bias; consider independent ATS simulators or deterministic parsers for validation.
+
+Future work:
+- Integrate a deterministic, open-source PDF text extractor or server-side pdftotext (for reproducible ground truth extraction).
+- Add adversarial prompt tests for prompt injection robustness.
+- Add formal anonymization options to redact PII before storage or before passing to LLM (e.g., hash contact fields).
+- Evaluate cross-LLM behavior (Claude vs. other models) to analyze robustness and variance.
+
+---
+
+9. Reproducibility checklist and artifacts
+------------------------------------------
+To reproduce experiments:
+- Source code repository (include commit hash in artifacts).
+- Node environment: Node 18+, npm install.
+- Dependencies: list from `package.json` (pdfjs-dist, puter client version used in code, React, etc.)
+- Puter account credentials (or test account) and instructions to configure Puter client script.
+- LaTeX compile proxy (instructions to run local Express server and configure backend to use texlive service or Docker texlive image).
+- Dataset of resumes (include annotation schema and gold-standard labels).
+- Prompt templates and AIResponseFormat (include exact strings used in `constants/index.ts`).
+- Random seeds and a repeatable protocol for calling LLMs (where reproducible).
+- Logging and metrics collection scripts.
+
+Suggested file artifacts to include in the paper supplementary:
+- `.tex` template used for resume generation.
+- A small set of example resumes and their ground-truth parsedContent JSON.
+- Date validation test corpus with injected anomalies and expected detection labels.
+
+---
+
+10. References and acknowledgements
+-----------------------------------
+- Puter (BaaS): used for client-side authentication, file system and LLM proxying.
+- pdfjs-dist: client-side PDF rendering and canvas rasterization.
+- Claude family LLMs (via Puter.ai): used for extraction, scoring and optimization.
+- LaTeX (texlive) for deterministic resume PDF rendering.
+- Libraries: React, Vite, Tailwind, Zustand, Cheerio, Axios.
+
+---
+
+Appendix A — Example prompts and constraint patterns (verbatim templates)
+--------------------------------------------------------------------------
+Note: To keep your experimental pipelines reproducible, save the actual prompt strings from `constants/index.ts` (the project includes `prepareInstructions()` and `AIResponseFormat` which should be used verbatim). When conducting experiments, include the exact prompt variants and temperature/top_k values used for the LLM.
+
+Appendix B — Regex examples used in date validation (illustrative)
+-----------------------------------------------------------------
+The date validator uses robust pattern sets; representative regexes include (expressed informally):
+- Year pattern: (19|20)\d{2}
+- Month-year: (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}
+- Range: (start)\s*[-–to]+\s*(end|Present)
+- Composite capture for lines like "Jan 2018 - Feb 2020" and bracketed forms "Feb 2017 (2017-2019)"
+
+Important: exact expressions are implemented in `app/lib/dateValidation.ts`. Use that file for production-grade matching and edge-case handling.
+
+---
+
+Closing notes
+-------------
+This documentation augments the README with technical depth targeted for academic and research evaluation. If you plan to include this in a paper, I can:
+- Extract and format the "Evaluation methodology" into a reproducible experiment protocol (Step-by-step).
+- Produce LaTeX-friendly artifact packaging (zip containing prompts, `.tex` template, and a small labeled dataset).
+- Draft a short Methods section summarizing the hybrid deterministic + LLM design for a formal paper.
