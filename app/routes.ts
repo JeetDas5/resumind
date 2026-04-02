@@ -10,5 +10,6 @@ export default [
   route("/resume/:id/result", "routes/resume.$id.result.tsx"),
   route("/wipe", "routes/wipe.tsx"),
   route("/api", "routes/api_.ts"),
+  route("/api/latex", "routes/api_.latex.ts"),
   route("/api/scrape", "routes/api_.scrape.ts"),
 ] satisfies RouteConfig;
