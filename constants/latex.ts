@@ -513,11 +513,11 @@ ${certSection}
 }
 
 /**
- * Compile the LaTeX source via our Express server proxy (localhost:5000)
+ * Compile the LaTeX source via our Express server proxy (https://resumind-hypz.onrender.com)
  * which forwards to texlive.net with proper multipart encoding.
  */
 export async function compileLatexToPDF(latexSource: string): Promise<Blob> {
-  const response = await fetch("http://localhost:5000/api/latex", {
+  const response = await fetch("https://resumind-hypz.onrender.com/api/latex", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ latex: latexSource }),
