@@ -158,13 +158,13 @@ ai-resume-analyser/
 
 ## Acknowledgements
 
-- Puter — https://puter.com
-- Tailwind CSS — https://tailwindcss.com
-- React Router — https://reactrouter.com
-- Vite — https://vitejs.dev
-- TypeScript — https://www.typescriptlang.org
-- Zustand — https://zustand.docs.pmnd.rs/
-- React — https://react.dev
+- Puter - https://puter.com
+- Tailwind CSS - https://tailwindcss.com
+- React Router - https://reactrouter.com
+- Vite - https://vitejs.dev
+- TypeScript - https://www.typescriptlang.org
+- Zustand - https://zustand.docs.pmnd.rs/
+- React - https://react.dev
 
 **Made with ❤️ by Jeet Das**
 
