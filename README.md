@@ -1,6 +1,6 @@
 # Resumind – AI Resume Analyzer
 
-Smart, AI-powered resume feedback with ATS scoring, improvement tips, and application tracking.
+Smart, AI-powered resume feedback with ATS scoring, improvement tips, and custom resume builder.
 
 Resumind lets you upload a resume (PDF), analyzes it with an AI model, and provides structured feedback across ATS fit, tone & style, content, structure, and skills. It stores your past analyses so you can revisit and track improvements over time.
 
