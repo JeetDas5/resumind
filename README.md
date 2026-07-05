@@ -167,5 +167,3 @@ ai-resume-analyser/
 - React - https://react.dev
 
 **Made with ❤️ by Jeet Das**
-
-GitHub: https://github.com/JeetDas5
